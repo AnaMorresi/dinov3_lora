@@ -732,7 +732,9 @@ def main(argv=None):
         recurse=True,
     )
     # Mover de meta a CUDA y forzar float32
-    model = model.to_empty(device="cuda", dtype=torch.float32)
+    model = model.to_empty(device="cuda")
+    # Forzar float32
+    model = model.float()
                            
     logger.info(f"Model after distributed:\n{model}")
     if args.eval_only:
