@@ -380,7 +380,7 @@ def build_data_loader_from_cfg(
         transform=model.build_data_augmentation_dino(cfg),
     )
     ###
-    
+
     if isinstance(dataset, torch.utils.data.IterableDataset):
         sampler_type = SamplerType.INFINITE
     else:
@@ -720,6 +720,7 @@ def main(argv=None):
     with torch.device("meta"):
         model = meta_arch(cfg)
     model.prepare_for_distributed_training()
+    model = model.to("cuda").float()
 
     # Fill all values with `nans` so that we identify
     # non-initialized values
