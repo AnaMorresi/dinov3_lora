@@ -60,7 +60,7 @@ class LoRALinear(nn.Module):
         self.alpha = alpha
         self.scaling = alpha / r
 
-        # 🔹 Capa original (congelada)
+        # Capa original (congelada)
         self.weight = original_linear.weight
         self.bias = original_linear.bias
 
@@ -68,7 +68,7 @@ class LoRALinear(nn.Module):
         if self.bias is not None:
             self.bias.requires_grad = False
 
-        # 🔹 LoRA matrices
+        # LoRA matrices
         self.lora_A = nn.Parameter(torch.zeros(r, self.in_features))
         self.lora_B = nn.Parameter(torch.zeros(self.out_features, r))
 
@@ -367,12 +367,20 @@ def build_data_loader_from_cfg(
     batch_size = dataloader_batch_size_per_gpu
     num_workers = cfg.train.num_workers
     dataset_path = cfg.train.dataset_path
-    dataset = make_dataset(
-        dataset_str=dataset_path,
-        transform=model.build_data_augmentation_dino(cfg),
-        target_transform=lambda _: (),
-    )
+    # dataset = make_dataset(
+    #     dataset_str=dataset_path,
+    #     transform=model.build_data_augmentation_dino(cfg),
+    #     target_transform=lambda _: (),
+    # )
+    from torchvision.datasets import ImageFolder
+    from torchvision import transforms
 
+    dataset = ImageFolder(
+        root=cfg.train.dataset_path,
+        transform=model.build_data_augmentation_dino(cfg),
+    )
+    ###
+    
     if isinstance(dataset, torch.utils.data.IterableDataset):
         sampler_type = SamplerType.INFINITE
     else:
