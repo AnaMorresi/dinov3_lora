@@ -720,7 +720,6 @@ def main(argv=None):
     with torch.device("meta"):
         model = meta_arch(cfg)
     model.prepare_for_distributed_training()
-    model = model.to("cuda").float()
 
     # Fill all values with `nans` so that we identify
     # non-initialized values
@@ -732,6 +731,9 @@ def main(argv=None):
         ),
         recurse=True,
     )
+    # Mover de meta a CUDA y forzar float32
+    model = model.to_empty(device="cuda", dtype=torch.float32)
+                           
     logger.info(f"Model after distributed:\n{model}")
     if args.eval_only:
         model.init_weights()
