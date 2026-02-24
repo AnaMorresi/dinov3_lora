@@ -352,82 +352,6 @@ class SSLMetaArch(nn.Module):
                 self.teacher.ibot_head.init_weights()
             logger.info(f"Performing distillation from: {self.teacher}")
 
-    # def forward_backward(
-    #     self, data, *, teacher_temp, iteration=0, **ignored_kwargs
-    # ) -> tuple[Tensor, dict[str, float | Tensor]]:
-    #     del ignored_kwargs
-    #     metrics_dict = {}
-
-    #     # Shapes
-    #     n_global_crops = 2
-    #     n_local_crops = self.n_local_crops  # self.cfg.crops.local_crops_number
-    #     B = data["collated_local_crops"].shape[0] // n_local_crops
-    #     assert data["collated_global_crops"].shape[0] == n_global_crops * B
-    #     metrics_dict["local_batch_size"] = B
-    #     metrics_dict["global_batch_size"] = data["global_batch_size"]
-
-    #     global_crops = data["collated_global_crops"].cuda(non_blocking=True)
-    #     local_crops = data["collated_local_crops"].cuda(non_blocking=True)
-    #     masks = data["collated_masks"].cuda(non_blocking=True)
-    #     mask_indices_list = data["mask_indices_list"].cuda(non_blocking=True)
-    #     masks_weight = data["masks_weight"].cuda(non_blocking=True)
-    #     n_masked_patches_tensor = data["n_masked_patches"].cuda(non_blocking=True)
-
-    #     if self.has_gram_teacher:
-    #         assert "collated_gram_teacher_crops" in data, (
-    #             "no gram teacher crops in the data, have you set cfg.crops.gram_teacher_crops_size?"
-    #         )
-    #         gram_teacher_crops = data["collated_gram_teacher_crops"].cuda(non_blocking=True)
-    #     else:
-    #         gram_teacher_crops = None
-
-    #     # Teacher output (will trigger an all-gather to unshard)
-    #     teacher_global = self.get_teacher_output(
-    #         global_crops.unflatten(0, (n_global_crops, B)),
-    #         teacher_temp=teacher_temp,
-    #         n_masked_patches_tensor=n_masked_patches_tensor,
-    #         mask_indices_list=mask_indices_list,
-    #         upperbound=data["upperbound"],
-    #     )
-
-    #     # Student output (will trigger an all-gather to unshard)
-    #     student_global, student_local = self.get_student_output(
-    #         global_crops=global_crops.unflatten(0, (n_global_crops, B)),
-    #         local_crops=local_crops.unflatten(0, (n_local_crops, B)),
-    #         upperbound=data["upperbound"],
-    #         masks=masks,
-    #         mask_indices_list=mask_indices_list,
-    #     )
-
-    #     # Gram output
-    #     if self.gram_use_loss:
-    #         gram_global = self.get_gram_teacher_output(
-    #             gram_teacher_crops.unflatten(0, (n_global_crops, B)) if gram_teacher_crops is not None else None,
-    #             masks=masks,
-    #             teacher_global=teacher_global,
-    #             student_global=student_global,
-    #             student_global_crops_size=global_crops.shape[-1],
-    #         )
-    #     else:
-    #         gram_global = {}
-
-    #     # Compute losses and backprop
-    #     loss_accumulator, loss_dict = self.compute_losses(
-    #         teacher_global=teacher_global,
-    #         student_global=student_global,
-    #         student_local=student_local,
-    #         gram_global=gram_global,
-    #         masks=masks,
-    #         mask_indices_list=mask_indices_list,
-    #         masks_weight=masks_weight,
-    #         iteration=iteration,
-    #     )
-
-    #     self.backprop_loss(loss_accumulator)
-
-    #     # Return total weighted loss and a dict of metrics to log
-    #     return loss_accumulator, metrics_dict | loss_dict
-
     def forward_backward(
         self, data, *, teacher_temp, iteration=0, **ignored_kwargs
     ) -> tuple[Tensor, dict[str, float | Tensor]]:
@@ -436,28 +360,28 @@ class SSLMetaArch(nn.Module):
 
         # Shapes
         n_global_crops = 2
-        n_local_crops = self.n_local_crops
+        n_local_crops = self.n_local_crops  # self.cfg.crops.local_crops_number
         B = data["collated_local_crops"].shape[0] // n_local_crops
         assert data["collated_global_crops"].shape[0] == n_global_crops * B
         metrics_dict["local_batch_size"] = B
         metrics_dict["global_batch_size"] = data["global_batch_size"]
 
-        device = torch.device("cuda")
-
-        # --- CONVERTIR TODAS LAS ENTRADAS A BF16 ---
-        global_crops = data["collated_global_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
-        local_crops = data["collated_local_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
-        masks = data["collated_masks"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
-        mask_indices_list = data["mask_indices_list"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
-        masks_weight = data["masks_weight"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
-        n_masked_patches_tensor = data["n_masked_patches"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+        global_crops = data["collated_global_crops"].cuda(non_blocking=True)
+        local_crops = data["collated_local_crops"].cuda(non_blocking=True)
+        masks = data["collated_masks"].cuda(non_blocking=True)
+        mask_indices_list = data["mask_indices_list"].cuda(non_blocking=True)
+        masks_weight = data["masks_weight"].cuda(non_blocking=True)
+        n_masked_patches_tensor = data["n_masked_patches"].cuda(non_blocking=True)
 
         if self.has_gram_teacher:
-            gram_teacher_crops = data["collated_gram_teacher_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+            assert "collated_gram_teacher_crops" in data, (
+                "no gram teacher crops in the data, have you set cfg.crops.gram_teacher_crops_size?"
+            )
+            gram_teacher_crops = data["collated_gram_teacher_crops"].cuda(non_blocking=True)
         else:
             gram_teacher_crops = None
 
-        # Teacher output
+        # Teacher output (will trigger an all-gather to unshard)
         teacher_global = self.get_teacher_output(
             global_crops.unflatten(0, (n_global_crops, B)),
             teacher_temp=teacher_temp,
@@ -466,7 +390,7 @@ class SSLMetaArch(nn.Module):
             upperbound=data["upperbound"],
         )
 
-        # Student output
+        # Student output (will trigger an all-gather to unshard)
         student_global, student_local = self.get_student_output(
             global_crops=global_crops.unflatten(0, (n_global_crops, B)),
             local_crops=local_crops.unflatten(0, (n_local_crops, B)),
@@ -476,16 +400,16 @@ class SSLMetaArch(nn.Module):
         )
 
         # Gram output
-        gram_global = {}
         if self.gram_use_loss:
-            if gram_teacher_crops is not None:
-                gram_global = self.get_gram_teacher_output(
-                    gram_teacher_crops.unflatten(0, (n_global_crops, B)),
-                    masks=masks,
-                    teacher_global=teacher_global,
-                    student_global=student_global,
-                    student_global_crops_size=global_crops.shape[-1],
-                )
+            gram_global = self.get_gram_teacher_output(
+                gram_teacher_crops.unflatten(0, (n_global_crops, B)) if gram_teacher_crops is not None else None,
+                masks=masks,
+                teacher_global=teacher_global,
+                student_global=student_global,
+                student_global_crops_size=global_crops.shape[-1],
+            )
+        else:
+            gram_global = {}
 
         # Compute losses and backprop
         loss_accumulator, loss_dict = self.compute_losses(
@@ -503,6 +427,82 @@ class SSLMetaArch(nn.Module):
 
         # Return total weighted loss and a dict of metrics to log
         return loss_accumulator, metrics_dict | loss_dict
+
+    # def forward_backward(
+    #     self, data, *, teacher_temp, iteration=0, **ignored_kwargs
+    # ) -> tuple[Tensor, dict[str, float | Tensor]]:
+    #     del ignored_kwargs
+    #     metrics_dict = {}
+
+    #     # Shapes
+    #     n_global_crops = 2
+    #     n_local_crops = self.n_local_crops
+    #     B = data["collated_local_crops"].shape[0] // n_local_crops
+    #     assert data["collated_global_crops"].shape[0] == n_global_crops * B
+    #     metrics_dict["local_batch_size"] = B
+    #     metrics_dict["global_batch_size"] = data["global_batch_size"]
+
+    #     device = torch.device("cuda")
+
+    #     # --- CONVERTIR TODAS LAS ENTRADAS A BF16 ---
+    #     global_crops = data["collated_global_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     local_crops = data["collated_local_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     masks = data["collated_masks"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     mask_indices_list = data["mask_indices_list"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     masks_weight = data["masks_weight"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     n_masked_patches_tensor = data["n_masked_patches"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+
+    #     if self.has_gram_teacher:
+    #         gram_teacher_crops = data["collated_gram_teacher_crops"].to(device=device, dtype=torch.bfloat16, non_blocking=True)
+    #     else:
+    #         gram_teacher_crops = None
+
+    #     # Teacher output
+    #     teacher_global = self.get_teacher_output(
+    #         global_crops.unflatten(0, (n_global_crops, B)),
+    #         teacher_temp=teacher_temp,
+    #         n_masked_patches_tensor=n_masked_patches_tensor,
+    #         mask_indices_list=mask_indices_list,
+    #         upperbound=data["upperbound"],
+    #     )
+
+    #     # Student output
+    #     student_global, student_local = self.get_student_output(
+    #         global_crops=global_crops.unflatten(0, (n_global_crops, B)),
+    #         local_crops=local_crops.unflatten(0, (n_local_crops, B)),
+    #         upperbound=data["upperbound"],
+    #         masks=masks,
+    #         mask_indices_list=mask_indices_list,
+    #     )
+
+    #     # Gram output
+    #     gram_global = {}
+    #     if self.gram_use_loss:
+    #         if gram_teacher_crops is not None:
+    #             gram_global = self.get_gram_teacher_output(
+    #                 gram_teacher_crops.unflatten(0, (n_global_crops, B)),
+    #                 masks=masks,
+    #                 teacher_global=teacher_global,
+    #                 student_global=student_global,
+    #                 student_global_crops_size=global_crops.shape[-1],
+    #             )
+
+    #     # Compute losses and backprop
+    #     loss_accumulator, loss_dict = self.compute_losses(
+    #         teacher_global=teacher_global,
+    #         student_global=student_global,
+    #         student_local=student_local,
+    #         gram_global=gram_global,
+    #         masks=masks,
+    #         mask_indices_list=mask_indices_list,
+    #         masks_weight=masks_weight,
+    #         iteration=iteration,
+    #     )
+
+    #     self.backprop_loss(loss_accumulator)
+
+    #     # Return total weighted loss and a dict of metrics to log
+    #     return loss_accumulator, metrics_dict | loss_dict
 
     @torch.no_grad()
     def get_teacher_output(
