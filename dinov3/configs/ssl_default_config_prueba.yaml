@@ -63,7 +63,7 @@ gram:
   loss_weight_schedule: null  # (dict): If not None, use a schedule for the loss weight instead of `loss_weight`
 train:
   batch_size_per_gpu: 64
-  dataset_path: "ImageNet:root=/content/datasets/dummy_imagenet extra=/content/datasets/dummy_imagenet split=TRAIN"
+  dataset_path: 'ImageNet:root=/content/datasets/dummy_imagenet:extra=/content/datasets/dummy_imagenet:split=TRAIN'
   data_config: null
   output_dir: .
   saveckp_freq: 20
@@ -172,7 +172,7 @@ crops:
   teacher_to_student_resolution_scale: 1.0
 evaluation:
   eval_period_iterations: 12500
-  dataset_path: "ImageNet:root=/content/datasets/dummy_imagenet extra=/content/datasets/dummy_imagenet split=VAL"
+  dataset_path: 'ImageNet:root=/content/datasets/dummy_imagenet:extra=/content/datasets/dummy_imagenet:split=VAL'
   low_freq_every: 5
   config_files:  # Must be in fairvit/eval/configs
     high_freq: benchmark_high_frequency.yaml  # More often
