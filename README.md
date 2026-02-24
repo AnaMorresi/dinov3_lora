@@ -1,4 +1,8 @@
-🆕 [2025-09-17] :fire: DINOv3 backbones are now supported by the [PyTorch Image Models / timm](https://github.com/huggingface/pytorch-image-models/) library starting with version [1.0.20](https://github.com/huggingface/pytorch-image-models/releases/tag/v1.0.20)
+🆕 [2025-11-20] Distillation code and configurations for ConvNeXt backbones are now released!
+
+🆕 [2025-10-13] [Semantic segmentation](https://github.com/facebookresearch/dinov3?tab=readme-ov-file#linear-segmentation-with-data-augmentation-on-ade20k) (ADE20K) and [monocular depth estimation](https://github.com/facebookresearch/dinov3?tab=readme-ov-file#linear-depth-estimation-on-nyuv2-depth) (NYUv2-Depth) linear probing code are now released!
+
+[2025-09-17] DINOv3 backbones are now supported by the [PyTorch Image Models / timm](https://github.com/huggingface/pytorch-image-models/) library starting with version [1.0.20](https://github.com/huggingface/pytorch-image-models/releases/tag/v1.0.20)
 
 [2025-08-29] DINOv3 backbones are [supported](https://huggingface.co/docs/transformers/model_doc/dinov3) by released versions of the Hugging Face [Transformers](https://huggingface.co/docs/transformers/index) library starting with version [4.56.0](https://github.com/huggingface/transformers/releases/tag/v4.56.0)
 
@@ -197,7 +201,7 @@ image = load_image(url)
 
 feature_extractor = pipeline(
     model="facebook/dinov3-convnext-tiny-pretrain-lvd1689m",
-    task="image-feature-extraction", 
+    task="image-feature-extraction",
 )
 features = feature_extractor(image)
 ```
@@ -213,8 +217,8 @@ image = load_image(url)
 pretrained_model_name = "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
 processor = AutoImageProcessor.from_pretrained(pretrained_model_name)
 model = AutoModel.from_pretrained(
-    pretrained_model_name, 
-    device_map="auto", 
+    pretrained_model_name,
+    device_map="auto",
 )
 
 inputs = processor(images=image, return_tensors="pt").to(model.device)
@@ -409,20 +413,6 @@ output_dir=<PATH/TO/OUTPUT/DIR>
 - One can also save prediction results using `result_config.save_results=true`.
 
 
-#### Linear depth estimation on NYUv2 Depth
-```shell
-PYTHONPATH=. python -m dinov3.run.submit dinov3/eval/depth/run.py \
-    model.dino_hub=dinov3_vit7b16 \
-    config=dinov3/eval/depth/configs/config-nyu.yaml \
-    datasets.root=<PATH/TO/DATASET> \
-    --output-dir <PATH/TO/OUTPUT/DIR>
-```
-
-After the job completes, you will find in the output path directory you specified
-- `depth_config.yaml` that contains the config you trained the model with;
-- `model_final.pth`, the final linear head checkpoint at the end of training; and
-- `results-depth.csv` with the final metrics.
-
 ### Pretrained heads - Detector trained on COCO2017 dataset
 
 <table style="margin: auto">
@@ -523,7 +513,7 @@ transform = make_transform(img_size)
 with torch.inference_mode():
     with torch.autocast('cuda', dtype=torch.bfloat16):
         batch_img = transform(img)[None]
-        pred_vit7b = segmentor(batch_img)  # raw predictions  
+        pred_vit7b = segmentor(batch_img)  # raw predictions
         # actual segmentation map
         segmentation_map_vit7b = make_inference(
             batch_img,
@@ -689,7 +679,7 @@ PYTHONPATH=${PWD} python -m dinov3.run.submit dinov3/train/train.py \
   --config-file dinov3/configs/train/dinov3_vit7b16_gram_anchor.yaml \
   --output-dir <PATH/TO/OUTPUT/DIR> \
   train.dataset_path=<DATASET>:root=<PATH/TO/DATASET>:extra=<PATH/TO/DATASET> \
-  gram.ckpt=<PATH/TO/GRAM_TEACHER_FROM_PREVIOUS_STEP>   
+  gram.ckpt=<PATH/TO/GRAM_TEACHER_FROM_PREVIOUS_STEP>
 ```
 
 #### High-resolution adaptation
@@ -705,7 +695,7 @@ PYTHONPATH=${PWD} python -m dinov3.run.submit dinov3/train/train.py \
   student.resume_from_teacher_chkpt=<PATH/TO/TEACHER_FROM_GRAM>
 ```
 
-## Multi-distillation 
+## Multi-distillation
 
 ### Test setup:
 
@@ -771,6 +761,21 @@ After the job completes, you will find in the output path directory you specifie
 - `model_final.pth`, the final linear head checkpoint at the end of training; and
 - `results-semantic-segmentation.csv` with the final metrics.
 
+
+#### Linear depth estimation on NYUv2 Depth
+```shell
+PYTHONPATH=. python -m dinov3.run.submit dinov3/eval/depth/run.py \
+    model.dino_hub=dinov3_vit7b16 \
+    config=dinov3/eval/depth/configs/config-nyu.yaml \
+    datasets.root=<PATH/TO/DATASET> \
+    --output-dir <PATH/TO/OUTPUT/DIR>
+```
+
+After the job completes, you will find in the output path directory you specified
+- `depth_config.yaml` that contains the config you trained the model with;
+- `model_final.pth`, the final linear head checkpoint at the end of training; and
+- `results-depth.csv` with the final metrics.
+
 ### Text alignment on DINOv3 using dino.txt
 
 Text alignment can be done following the method from `dino.txt` aka [DINOv2 Meets Text](https://arxiv.org/abs/2412.16334).
@@ -778,13 +783,13 @@ Text alignment can be done following the method from `dino.txt` aka [DINOv2 Meet
 ```shell
 PYTHONPATH=${PWD} python -m dinov3.run.submit dinov3/eval/text/train_dinotxt.py \
    --nodes 4 \
-  # An example config for text alignment is here: dinov3/eval/text/configs/dinov3_vitl_text.yaml \ 
+  # An example config for text alignment is here: dinov3/eval/text/configs/dinov3_vitl_text.yaml \
   trainer_config_file="<PATH/TO/DINOv3/TEXT/CONFIG>" \
   output-dir=<PATH/TO/OUTPUT/DIR>
 ```
 Launching the above trains text alignment on 4 nodes with 8 gpus each (32 gpus in total).
 Please note that the text alignment model in the DINOv3 paper was trained on a private dataset and here we have given an example config in ```dinov3/eval/text/configs/dinov3_vitl_text.yaml``` using ```CocoCaptions``` dataset for illustration purposes.
-Please adapt the provided ```CocoCaptions``` dataset class, the dataset can be found [here](https://www.kaggle.com/datasets/nikhil7280/coco-image-caption)  
+Please adapt the provided ```CocoCaptions``` dataset class, the dataset can be found [here](https://www.kaggle.com/datasets/nikhil7280/coco-image-caption)
 
 ## License
 
