@@ -100,7 +100,11 @@ class SelfAttention(nn.Module):
         for _, (qkv, _, rope) in enumerate(zip(qkv_list, shapes, rope_list)):
             att_out.append(self.compute_attention(qkv, attn_bias=attn_bias, rope=rope))
         x_flat, shapes, num_tokens = cat_keep_shapes(att_out)
+        # x_flat = self.proj(x_flat)
+        # layers/attention.py, forward_list:
+        x_flat = x_flat.to_native()  # convierte DTensor -> Tensor normal
         x_flat = self.proj(x_flat)
+        ###
         return uncat_with_shapes(x_flat, shapes, num_tokens)
 
     def compute_attention(self, qkv: Tensor, attn_bias=None, rope=None) -> Tensor:
