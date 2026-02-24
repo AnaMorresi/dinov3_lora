@@ -306,10 +306,17 @@ def build_data_loader_from_cfg(
     batch_size = dataloader_batch_size_per_gpu
     num_workers = cfg.train.num_workers
     dataset_path = cfg.train.dataset_path
-    dataset = make_dataset(
-        dataset_str=dataset_path,
-        transform=model.build_data_augmentation_dino(cfg),
-        target_transform=lambda _: (),
+    # dataset = make_dataset(
+    #     dataset_str=dataset_path,
+    #     transform=model.build_data_augmentation_dino(cfg),
+    #     target_transform=lambda _: (),
+    # )
+    from torchvision.datasets import ImageFolder
+    from torchvision import transforms
+    dataset = ImageFolder(
+        root = dataset_path,
+        transform = model.build_data_augmentation_dino(cfg),
+        target_transform=lambda _: ()
     )
 
     if isinstance(dataset, torch.utils.data.IterableDataset):
