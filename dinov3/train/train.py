@@ -749,29 +749,73 @@ def do_train(cfg, model, resume=False):
 #     do_train(cfg, model, resume=not args.no_resume)
 
 def main(argv=None):
-    args = get_args_parser().parse_args() if argv is None else get_args_parser().parse_args(argv[1:])
-    
-    setup_job(output_dir=args.output_dir, seed=args.seed)
-    cfg = setup_config(args, strict_cfg=False)
-    setup_logging(output=os.path.join(os.path.abspath(args.output_dir), "nan_logs"), name="nan_logger")
+    if argv is None:
+        args = get_args_parser().parse_args()
+    else:
+        args = get_args_parser().parse_args(argv[1:])
+        args.output_dir = sys.argv[1]
 
-    meta_arch = {"SSLMetaArch": SSLMetaArch, "MultiDistillationMetaArch": MultiDistillationMetaArch}[cfg.MODEL.META_ARCHITECTURE]
+    if args.multi_distillation:
+        print("performing multidistillation run")
+        cfg = setup_multidistillation(args)
+        torch.distributed.barrier()
+        logger.info("setup_multidistillation done")
+        assert cfg.MODEL.META_ARCHITECTURE == "MultiDistillationMetaArch"
+    else:
+        setup_job(output_dir=args.output_dir, seed=args.seed)
+        cfg = setup_config(args, strict_cfg=False)
+        logger.info(cfg)
+        setup_logging(
+            output=os.path.join(os.path.abspath(args.output_dir), "nan_logs"),
+            name="nan_logger",
+        )
+
+    meta_arch = {
+        "SSLMetaArch": SSLMetaArch,
+        "MultiDistillationMetaArch": MultiDistillationMetaArch,
+    }.get(cfg.MODEL.META_ARCHITECTURE, None)
+
+    if meta_arch is None:
+        raise ValueError(f"Unknown MODEL.META_ARCHITECTURE {cfg.MODEL.META_ARCHITECTURE}")
 
     logger.info(f"Making meta arch {meta_arch.__name__}")
+
+    # Inicializar en meta device
     with torch.device("meta"):
         model = meta_arch(cfg)
+    
+    model.prepare_for_distributed_training()
 
-    # Mover a CUDA de manera segura para FSDP
-    model = model.to_empty(device="cuda")
+    # Llenar con NaNs para identificar no inicializados
+    model._apply(
+        lambda t: torch.full_like(
+            t,
+            fill_value=math.nan if t.dtype.is_floating_point else (2 ** (t.dtype.itemsize * 8 - 1)),
+            device="cuda",
+        ),
+        recurse=True,
+    )
 
-    # Inicializar pesos correctamente
+    # Inicializar pesos
     model.init_weights()
 
+    # --- CONVERSIÓN A BF16 PARA T4 / FSDP ---
+    model = model.to_empty(device="cuda")  # reservar memoria con DTensor
+    model = model.to(dtype=torch.bfloat16)  # convertir todos los pesos y bias a bf16
+
+    logger.info(f"Model prepared for BF16 training:\n{model}")
+
     if args.eval_only:
-        iteration = model.get_checkpointer_class()(model, save_dir=cfg.train.output_dir).resume_or_load(cfg.MODEL.WEIGHTS, resume=not args.no_resume).get("iteration", -1) + 1
+        iteration = (
+            model.get_checkpointer_class()(model, save_dir=cfg.train.output_dir)
+            .resume_or_load(cfg.MODEL.WEIGHTS, resume=not args.no_resume)
+            .get("iteration", -1)
+            + 1
+        )
         return do_test(cfg, model, f"manual_{iteration}")
 
+    # Entrenamiento
     do_train(cfg, model, resume=not args.no_resume)
-
+    
 if __name__ == "__main__":
     main()
