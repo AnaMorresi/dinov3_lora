@@ -469,6 +469,11 @@ def do_train(cfg, model, resume=False):
         param.requires_grad = False
 
     print("LoRA injected.")
+
+    for name, p in model.named_parameters():
+        if "lora" in name:
+            print("FOUND LORA PARAM:", name, p.requires_grad)
+
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
