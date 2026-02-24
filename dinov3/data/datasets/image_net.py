@@ -90,7 +90,8 @@ class ImageNet(ExtendedVisionDataset):
 
     def _load_extra(self, extra_path: str) -> np.ndarray:
         extra_full_path = self._get_extra_full_path(extra_path)
-        return np.load(extra_full_path, mmap_mode="r")
+        #return np.load(extra_full_path, mmap_mode="r")
+        return np.load(extra_full_path, allow_pickle=True)
 
     def _save_extra(self, extra_array: np.ndarray, extra_path: str) -> None:
         extra_full_path = self._get_extra_full_path(extra_path)
