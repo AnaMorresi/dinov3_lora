@@ -46,6 +46,67 @@ torch.backends.cudnn.benchmark = False  # True
 
 logger = logging.getLogger("dinov3")
 
+### LoRA implementation
+import torch.nn as nn
+import math
+
+class LoRALinear(nn.Module):
+    def __init__(self, original_linear: nn.Linear, r=8, alpha=16, dropout=0.0):
+        super().__init__()
+
+        self.in_features = original_linear.in_features
+        self.out_features = original_linear.out_features
+        self.r = r
+        self.alpha = alpha
+        self.scaling = alpha / r
+
+        # 🔹 Capa original (congelada)
+        self.weight = original_linear.weight
+        self.bias = original_linear.bias
+
+        self.weight.requires_grad = False
+        if self.bias is not None:
+            self.bias.requires_grad = False
+
+        # 🔹 LoRA matrices
+        self.lora_A = nn.Parameter(torch.zeros(r, self.in_features))
+        self.lora_B = nn.Parameter(torch.zeros(self.out_features, r))
+
+        # Inicialización estándar LoRA
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_B)
+
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+
+    def forward(self, x):
+        # Capa original
+        result = nn.functional.linear(x, self.weight, self.bias)
+
+        # LoRA branch
+        lora_out = self.dropout(x)
+        lora_out = nn.functional.linear(lora_out, self.lora_A)
+        lora_out = nn.functional.linear(lora_out, self.lora_B)
+
+        return result + self.scaling * lora_out
+
+def inject_lora_into_vit(model, r=8, alpha=16):
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            #if "attn.qkv" in name or "attn.proj" in name:
+            if "attn.proj" in name:
+                parent = model
+                name_split = name.split(".")
+                for n in name_split[:-1]:
+                    parent = getattr(parent, n)
+
+                original_layer = getattr(parent, name_split[-1])
+                setattr(
+                    parent,
+                    name_split[-1],
+                    LoRALinear(original_layer, r=r, alpha=alpha),
+                )
+    return model
+###
 
 def get_args_parser(add_help: bool = True):
     parser = argparse.ArgumentParser("DINOv3 training", add_help=add_help)
@@ -385,8 +446,39 @@ def do_train(cfg, model, resume=False):
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     model.train()
+
+    model.init_weights()
+
+    # ----------------------
+    # Inject LoRA after weights init
+    # ----------------------
+    print("Injecting LoRA...")
+    model.student.backbone = inject_lora_into_vit(
+        model.student.backbone,
+        r=8,
+        alpha=16,
+    )
+
+    # Freeze backbone except LoRA
+    for name, param in model.student.named_parameters():
+        if "lora_" not in name:
+            param.requires_grad = False
+
+    # Freeze teacher
+    for param in model.teacher.parameters():
+        param.requires_grad = False
+
+    print("LoRA injected.")
+    ###
+
+    params_groups = model.get_params_groups()
+
+    # Filtrar solo parámetros entrenables
+    for group in params_groups:
+        group["params"] = [p for p in group["params"] if p.requires_grad]
+
     # Optimizer
-    optimizer = build_optimizer(cfg, model.get_params_groups())
+    optimizer = build_optimizer(cfg, params_groups)
     (
         lr_schedule,
         wd_schedule,
@@ -399,7 +491,7 @@ def do_train(cfg, model, resume=False):
             model,
             dont_save=[k for k, _ in model.state_dict().items() if k.startswith("teacher")],
         )
-    model.init_weights()
+
     start_iter = 0
     if resume and (last_checkpoint_dir := find_latest_checkpoint(ckpt_dir)):
         logger.info(f"Checkpoint found {last_checkpoint_dir}")
@@ -610,6 +702,7 @@ def main(argv=None):
     with torch.device("meta"):
         model = meta_arch(cfg)
     model.prepare_for_distributed_training()
+
     # Fill all values with `nans` so that we identify
     # non-initialized values
     model._apply(
