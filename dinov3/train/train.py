@@ -469,6 +469,11 @@ def do_train(cfg, model, resume=False):
         param.requires_grad = False
 
     print("LoRA injected.")
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print("Total params:", total)
+    print("Trainable params:", trainable)
     ###
 
     params_groups = model.get_params_groups()
