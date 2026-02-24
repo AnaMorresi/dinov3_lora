@@ -102,7 +102,9 @@ class SelfAttention(nn.Module):
         x_flat, shapes, num_tokens = cat_keep_shapes(att_out)
         # x_flat = self.proj(x_flat)
         # layers/attention.py, forward_list:
-        x_flat = x_flat.to_native()  # convierte DTensor -> Tensor normal
+        # layers/attention.py, línea ~105
+        if hasattr(x_flat, "to_native"):
+            x_flat = x_flat.to_native()  # convierte DTensor -> Tensor normal  # convierte DTensor -> Tensor normal
         x_flat = self.proj(x_flat)
         ###
         return uncat_with_shapes(x_flat, shapes, num_tokens)
