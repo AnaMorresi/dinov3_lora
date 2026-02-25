@@ -82,11 +82,14 @@ def save_checkpoint(
     process_group: dist.ProcessGroup = None,
     **others: Stateful,
 ):
+    """Save a plain/DDP/FSDP/FSDP2 model, its optimizer, an integer iteration and other stateful objects."""
+    rank = torch.distributed.get_rank(group=process_group)
+
+    ###
     print("RANK:", rank)
     print("CKPT DIR:", ckpt_dir)
     print("ITERATION:", iteration)
-    """Save a plain/DDP/FSDP/FSDP2 model, its optimizer, an integer iteration and other stateful objects."""
-    rank = torch.distributed.get_rank(group=process_group)
+    ###
 
     # Rank 0 checks if the checkpoint directory exists, but all ranks need to know if if exists,
     # so they can raise an error when overwrite is False. If overwrite is True, rank 0 will delete it
