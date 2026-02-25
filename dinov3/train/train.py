@@ -390,6 +390,7 @@ def do_train(cfg, model, resume=False):
     process_subgroup = distributed.get_process_subgroup()
     ckpt_dir = Path(cfg.train.output_dir, "ckpt").expanduser()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    print("ANA",cfg.train.output_dir)
 
     model.train()
     # Optimizer
