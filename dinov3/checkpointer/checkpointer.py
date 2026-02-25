@@ -82,6 +82,9 @@ def save_checkpoint(
     process_group: dist.ProcessGroup = None,
     **others: Stateful,
 ):
+    print("RANK:", rank)
+    print("CKPT DIR:", ckpt_dir)
+    print("ITERATION:", iteration)
     """Save a plain/DDP/FSDP/FSDP2 model, its optimizer, an integer iteration and other stateful objects."""
     rank = torch.distributed.get_rank(group=process_group)
 
