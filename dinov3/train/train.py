@@ -46,67 +46,6 @@ torch.backends.cudnn.benchmark = False  # True
 
 logger = logging.getLogger("dinov3")
 
-### LoRA implementation
-import torch.nn as nn
-import math
-
-class LoRALinear(nn.Module):
-    def __init__(self, original_linear: nn.Linear, r=8, alpha=16, dropout=0.0):
-        super().__init__()
-
-        self.in_features = original_linear.in_features
-        self.out_features = original_linear.out_features
-        self.r = r
-        self.alpha = alpha
-        self.scaling = alpha / r
-
-        # Capa original (congelada)
-        self.weight = original_linear.weight
-        self.bias = original_linear.bias
-
-        self.weight.requires_grad = False
-        if self.bias is not None:
-            self.bias.requires_grad = False
-
-        # LoRA matrices
-        self.lora_A = nn.Parameter(torch.zeros(r, self.in_features))
-        self.lora_B = nn.Parameter(torch.zeros(self.out_features, r))
-
-        # Inicialización estándar LoRA
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        nn.init.zeros_(self.lora_B)
-
-        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-
-    def forward(self, x):
-        # Capa original
-        result = nn.functional.linear(x, self.weight, self.bias)
-
-        # LoRA branch
-        lora_out = self.dropout(x)
-        lora_out = nn.functional.linear(lora_out, self.lora_A)
-        lora_out = nn.functional.linear(lora_out, self.lora_B)
-
-        return result + self.scaling * lora_out
-
-def inject_lora_into_vit(model, r=8, alpha=16):
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Linear):
-            #if "attn.qkv" in name or "attn.proj" in name:
-            if "attn.proj" in name:
-                parent = model
-                name_split = name.split(".")
-                for n in name_split[:-1]:
-                    parent = getattr(parent, n)
-
-                original_layer = getattr(parent, name_split[-1])
-                setattr(
-                    parent,
-                    name_split[-1],
-                    LoRALinear(original_layer, r=r, alpha=alpha),
-                )
-    return model
-###
 
 def get_args_parser(add_help: bool = True):
     parser = argparse.ArgumentParser("DINOv3 training", add_help=add_help)
@@ -374,12 +313,11 @@ def build_data_loader_from_cfg(
     # )
     from torchvision.datasets import ImageFolder
     from torchvision import transforms
-
     dataset = ImageFolder(
-        root=cfg.train.dataset_path,
-        transform=model.build_data_augmentation_dino(cfg),
+        root = dataset_path,
+        transform = model.build_data_augmentation_dino(cfg),
+        target_transform=lambda _: ()
     )
-    ###
 
     if isinstance(dataset, torch.utils.data.IterableDataset):
         sampler_type = SamplerType.INFINITE
@@ -454,49 +392,8 @@ def do_train(cfg, model, resume=False):
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     model.train()
-
-    model.init_weights()
-
-    # ----------------------
-    # Inject LoRA after weights init
-    # ----------------------
-    print("Injecting LoRA...")
-    model.student.backbone = inject_lora_into_vit(
-        model.student.backbone,
-        r=8,
-        alpha=16,
-    )
-
-    # Freeze backbone except LoRA
-    for name, param in model.student.named_parameters():
-        if "lora_" not in name:
-            param.requires_grad = False
-
-    # Freeze teacher
-    for param in model.teacher.parameters():
-        param.requires_grad = False
-
-    print("LoRA injected.")
-
-    for name, p in model.named_parameters():
-        if "lora" in name:
-            print("FOUND LORA PARAM:", name, p.requires_grad)
-
-    total = sum(p.numel() for p in model.parameters())
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-    print("Total params:", total)
-    print("Trainable params:", trainable)
-    ###
-
-    params_groups = model.get_params_groups()
-
-    # Filtrar solo parámetros entrenables
-    for group in params_groups:
-        group["params"] = [p for p in group["params"] if p.requires_grad]
-
     # Optimizer
-    optimizer = build_optimizer(cfg, params_groups)
+    optimizer = build_optimizer(cfg, model.get_params_groups())
     (
         lr_schedule,
         wd_schedule,
@@ -509,7 +406,7 @@ def do_train(cfg, model, resume=False):
             model,
             dont_save=[k for k, _ in model.state_dict().items() if k.startswith("teacher")],
         )
-
+    model.init_weights()
     start_iter = 0
     if resume and (last_checkpoint_dir := find_latest_checkpoint(ckpt_dir)):
         logger.info(f"Checkpoint found {last_checkpoint_dir}")
@@ -690,71 +587,12 @@ def do_train(cfg, model, resume=False):
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
-# def main(argv=None):
-#     if argv is None:
-#         args = get_args_parser().parse_args()
-#     else:
-#         args = get_args_parser().parse_args(argv[1:])
-#         args.output_dir = sys.argv[1]
-#     if args.multi_distillation:
-#         print("performing multidistillation run")
-#         cfg = setup_multidistillation(args)
-#         torch.distributed.barrier()
-#         logger.info("setup_multidistillation done")
-#         assert cfg.MODEL.META_ARCHITECTURE == "MultiDistillationMetaArch"
-#     else:
-#         setup_job(output_dir=args.output_dir, seed=args.seed)
-#         cfg = setup_config(args, strict_cfg=False)
-#         logger.info(cfg)
-#         setup_logging(
-#             output=os.path.join(os.path.abspath(args.output_dir), "nan_logs"),
-#             name="nan_logger",
-#         )
-#     meta_arch = {
-#         "SSLMetaArch": SSLMetaArch,
-#         "MultiDistillationMetaArch": MultiDistillationMetaArch,
-#     }.get(cfg.MODEL.META_ARCHITECTURE, None)
-#     if meta_arch is None:
-#         raise ValueError(f"Unknown MODEL.META_ARCHITECTURE {cfg.MODEL.META_ARCHITECTURE}")
-#     logger.info(f"Making meta arch {meta_arch.__name__}")
-#     with torch.device("meta"):
-#         model = meta_arch(cfg)
-#     model.prepare_for_distributed_training()
-
-#     # Fill all values with `nans` so that we identify
-#     # non-initialized values
-#     model._apply(
-#         lambda t: torch.full_like(
-#             t,
-#             fill_value=math.nan if t.dtype.is_floating_point else (2 ** (t.dtype.itemsize * 8 - 1)),
-#             device="cuda",
-#         ),
-#         recurse=True,
-#     )
-#     # Mover de meta a CUDA y forzar float32
-#     model = model.to_empty(device="cuda")
-#     # Forzar float32
-#     #model = model.float()
-                           
-#     logger.info(f"Model after distributed:\n{model}")
-#     if args.eval_only:
-#         model.init_weights()
-#         iteration = (
-#             model.get_checkpointer_class()(model, save_dir=cfg.train.output_dir)
-#             .resume_or_load(cfg.MODEL.WEIGHTS, resume=not args.no_resume)
-#             .get("iteration", -1)
-#             + 1
-#         )
-#         return do_test(cfg, model, f"manual_{iteration}")
-#     do_train(cfg, model, resume=not args.no_resume)
-
 def main(argv=None):
     if argv is None:
         args = get_args_parser().parse_args()
     else:
         args = get_args_parser().parse_args(argv[1:])
         args.output_dir = sys.argv[1]
-
     if args.multi_distillation:
         print("performing multidistillation run")
         cfg = setup_multidistillation(args)
@@ -769,24 +607,18 @@ def main(argv=None):
             output=os.path.join(os.path.abspath(args.output_dir), "nan_logs"),
             name="nan_logger",
         )
-
     meta_arch = {
         "SSLMetaArch": SSLMetaArch,
         "MultiDistillationMetaArch": MultiDistillationMetaArch,
     }.get(cfg.MODEL.META_ARCHITECTURE, None)
-
     if meta_arch is None:
         raise ValueError(f"Unknown MODEL.META_ARCHITECTURE {cfg.MODEL.META_ARCHITECTURE}")
-
     logger.info(f"Making meta arch {meta_arch.__name__}")
-
-    # Inicializar en meta device
     with torch.device("meta"):
         model = meta_arch(cfg)
-    
     model.prepare_for_distributed_training()
-
-    # Llenar con NaNs para identificar no inicializados
+    # Fill all values with `nans` so that we identify
+    # non-initialized values
     model._apply(
         lambda t: torch.full_like(
             t,
@@ -795,17 +627,9 @@ def main(argv=None):
         ),
         recurse=True,
     )
-
-    # Inicializar pesos
-    model.init_weights()
-
-    # --- CONVERSIÓN A BF16 PARA T4 / FSDP ---
-    model = model.to_empty(device="cuda")  # reservar memoria con DTensor
-    model = model.to(dtype=torch.bfloat16)  # convertir todos los pesos y bias a bf16
-
-    logger.info(f"Model prepared for BF16 training:\n{model}")
-
+    logger.info(f"Model after distributed:\n{model}")
     if args.eval_only:
+        model.init_weights()
         iteration = (
             model.get_checkpointer_class()(model, save_dir=cfg.train.output_dir)
             .resume_or_load(cfg.MODEL.WEIGHTS, resume=not args.no_resume)
@@ -813,9 +637,8 @@ def main(argv=None):
             + 1
         )
         return do_test(cfg, model, f"manual_{iteration}")
-
-    # Entrenamiento
     do_train(cfg, model, resume=not args.no_resume)
-    
+
+
 if __name__ == "__main__":
     main()
