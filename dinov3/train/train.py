@@ -578,6 +578,13 @@ def do_train(cfg, model, resume=False):
                 process_group=process_subgroup,
             )
             if distributed.is_subgroup_main_process():
+                ###
+                backbone = model.student["backbone"]
+                torch.save(
+                    backbone.state_dict(),
+                    ckpt_dir / f"backbone_iter_{iteration}.pth"
+                )
+                ###
                 keep_last_n_checkpoints(ckpt_dir, cfg.checkpointing.max_to_keep)
                 if "keep_every" in cfg.checkpointing and (iteration + 1) % cfg.checkpointing.keep_every == 0:
                     keep_checkpoint_copy(ckpt_dir / str(iteration))
