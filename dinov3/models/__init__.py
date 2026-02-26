@@ -15,6 +15,10 @@ from dinov3.layers.fp8_linear import convert_linears_to_fp8
 
 from . import vision_transformer as vits
 from . import convnext
+###
+from ..hub.backbones import dinov3_vits16
+vits.__dict__["dinov3_vits16"] = dinov3_vits16
+###
 
 logger = logging.getLogger("dinov3")
 
