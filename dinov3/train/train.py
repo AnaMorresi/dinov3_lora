@@ -445,6 +445,29 @@ def do_train(cfg, model, resume=False):
 
     # Training loop
     student = model.student
+
+    ###
+    # backbone
+    backbone = model.student["backbone"]
+
+    for p in backbone.parameters():
+        p.requires_grad = False
+
+    for p in backbone.blocks[-1].parameters():
+        p.requires_grad = True
+
+    # heads
+    for p in model.student["dino_head"].parameters():
+        p.requires_grad = True
+
+    for p in model.student["ibot_head"].parameters():
+        p.requires_grad = True
+
+    for name, p in model.student["backbone"].named_parameters():
+        if p.requires_grad:
+            print(name)
+    ###
+
     iteration = start_iter
     num_gram_updates = 0
     if (
