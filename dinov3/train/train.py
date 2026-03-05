@@ -393,6 +393,33 @@ def do_train(cfg, model, resume=False):
     print("ANA",cfg.train.output_dir)
 
     model.train()
+
+    model.init_weights()
+    
+    student = model.student
+
+    ###
+    # backbone
+    backbone = model.student["backbone"]
+
+    for p in backbone.parameters():
+        p.requires_grad = False
+
+    for p in backbone.blocks[-1].parameters():
+        p.requires_grad = True
+
+    # heads
+    for p in model.student["dino_head"].parameters():
+        p.requires_grad = True
+
+    for p in model.student["ibot_head"].parameters():
+        p.requires_grad = True
+
+    for name, p in model.student["backbone"].named_parameters():
+        if p.requires_grad:
+            print(name)
+    ###
+
     # Optimizer
     optimizer = build_optimizer(cfg, model.get_params_groups())
     (
@@ -407,7 +434,7 @@ def do_train(cfg, model, resume=False):
             model,
             dont_save=[k for k, _ in model.state_dict().items() if k.startswith("teacher")],
         )
-    model.init_weights()
+    #model.init_weights()
     start_iter = 0
     if resume and (last_checkpoint_dir := find_latest_checkpoint(ckpt_dir)):
         logger.info(f"Checkpoint found {last_checkpoint_dir}")
@@ -443,30 +470,8 @@ def do_train(cfg, model, resume=False):
     gc.disable()
     gc.collect()
 
-    # Training loop
-    student = model.student
-
-    ###
-    # backbone
-    backbone = model.student["backbone"]
-
-    for p in backbone.parameters():
-        p.requires_grad = False
-
-    for p in backbone.blocks[-1].parameters():
-        p.requires_grad = True
-
-    # heads
-    for p in model.student["dino_head"].parameters():
-        p.requires_grad = True
-
-    for p in model.student["ibot_head"].parameters():
-        p.requires_grad = True
-
-    for name, p in model.student["backbone"].named_parameters():
-        if p.requires_grad:
-            print(name)
-    ###
+    # # Training loop
+    # student = model.student
 
     iteration = start_iter
     num_gram_updates = 0
