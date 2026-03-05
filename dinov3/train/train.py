@@ -395,7 +395,7 @@ def do_train(cfg, model, resume=False):
     model.train()
 
     model.init_weights()
-    
+
     student = model.student
 
     ###
@@ -415,6 +415,7 @@ def do_train(cfg, model, resume=False):
     for p in model.student["ibot_head"].parameters():
         p.requires_grad = True
 
+    print("Parametros entrenables:")
     for name, p in model.student["backbone"].named_parameters():
         if p.requires_grad:
             print(name)
