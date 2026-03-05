@@ -416,9 +416,15 @@ def do_train(cfg, model, resume=False):
         p.requires_grad = True
 
     print("Parametros entrenables:")
-    for name, p in model.student["backbone"].named_parameters():
+    for name, p in model.student.named_parameters():
         if p.requires_grad:
             print(name)
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+
+    print(f"Trainable params: {trainable:,}")
+    print(f"Total params: {total:,}")
+    print(f"Percent trainable: {100*trainable/total:.2f}%")
     ###
 
     # Optimizer
