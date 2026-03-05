@@ -399,6 +399,13 @@ def do_train(cfg, model, resume=False):
     student = model.student
 
     ###
+    print("Verificando pesos backbone:")
+    w = model.student["backbone"].patch_embed.proj.weight
+    print("mean:", w.mean().item())
+    print("std:", w.std().item())
+    ###
+
+    ###
     # backbone
     backbone = model.student["backbone"]
 

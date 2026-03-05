@@ -314,7 +314,9 @@ def init_fsdp_model_from_checkpoint(
 def init_model_from_checkpoint_for_evals(
     model: torch.nn.Module, pretrained_weights: str | Path, checkpoint_key: str = None
 ):
+    print(f"\nANA: Loading checkpoint from: {pretrained_weights}")
     state_dict = torch.load(pretrained_weights, map_location="cpu")
+    print("Checkpoint keys:", list(state_dict.keys())[:10])
     if checkpoint_key is not None and checkpoint_key in state_dict:
         logger.info(f"Take key {checkpoint_key} in provided checkpoint dict")
         state_dict = state_dict[checkpoint_key]
