@@ -304,7 +304,8 @@ def init_fsdp_model_from_checkpoint(
                 key: tensor
                 for key, tensor in chkpt.items()
                 if not any(skip_load_key in key for skip_load_key in skip_load_keys)
-            }
+            },
+            strict=False,   ###cambio
         )
     else:  # DCP checkpoint
         load_checkpoint(ckpt_dir=checkpoint_path, model=model, process_group=process_group)
