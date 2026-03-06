@@ -302,35 +302,6 @@ class SSLMetaArch(nn.Module):
         self.student.backbone.init_weights()
         self.student.dino_head.init_weights()
         self.student.ibot_head.init_weights()
-        # ANA: cargar backbone pretrained
-        # ---------------------------
-        if hasattr(self.cfg.student, "pretrained_weights") and self.cfg.student.pretrained_weights:
-
-            import torch
-            import torch.distributed as dist
-            from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-
-            logger.info(f"Loading pretrained backbone from {self.cfg.student.pretrained_weights}")
-
-            # Cargar el checkpoint en CPU
-            state_dict = torch.load(self.cfg.student.pretrained_weights, map_location="cpu")
-
-            backbone = self.student.backbone
-
-            # Si el backbone está envuelto en FSDP, obtenemos el módulo original
-            unwrapped_backbone = FSDP.unwrap(backbone) if isinstance(backbone, FSDP) else backbone
-
-            # Filtrar solo las claves del backbone si es necesario
-            # state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items() if k.startswith("backbone.")}
-
-            # Cargar el state_dict directamente en el módulo sin usar FSDP.state_dict_type()
-            msg = unwrapped_backbone.load_state_dict(state_dict, strict=False)
-            logger.info(f"Backbone load result: {msg}")
-
-            # Verificación rápida
-            w = unwrapped_backbone.patch_embed.proj.weight
-            logger.info(f"Backbone weight stats mean={w.mean().item()} std={w.std().item()}")
-        # ---------------------------
         self.dino_loss.init_weights()
         self.ibot_patch_loss.init_weights()
         self.model_ema.load_state_dict(self.student.state_dict())
