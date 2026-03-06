@@ -12,6 +12,7 @@ import os
 import sys
 from functools import partial
 from pathlib import Path
+from xml.parsers.expat import model
 
 import torch
 import torch.distributed
@@ -417,6 +418,8 @@ def do_train(cfg, model, resume=False):
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
         state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
 
+        backbone = model.student["backbone"]
+
         with FSDP.state_dict_type(backbone, StateDictType.FULL_STATE_DICT):
             msg = backbone.load_state_dict(state_dict, strict=False)
 
@@ -435,7 +438,7 @@ def do_train(cfg, model, resume=False):
 
     ###
     # backbone
-    backbone = model.student["backbone"]
+    #backbone = model.student["backbone"]
 
     for p in backbone.parameters():
         p.requires_grad = False
