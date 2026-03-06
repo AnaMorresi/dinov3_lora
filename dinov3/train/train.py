@@ -396,6 +396,9 @@ def do_train(cfg, model, resume=False):
 
     model.init_weights()
     
+    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+    from torch.distributed.fsdp import StateDictType
+
     # ANA: Load pretrained backbone if provided
     if hasattr(cfg.student, "pretrained_weights") and cfg.student.pretrained_weights:
 
@@ -414,7 +417,8 @@ def do_train(cfg, model, resume=False):
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
         state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
 
-        msg = model.student["backbone"].load_state_dict(state_dict, strict=False)
+        with FSDP.state_dict_type(backbone, StateDictType.FULL_STATE_DICT):
+            msg = backbone.load_state_dict(state_dict, strict=False)
 
         print("ANA: pretrained load msg:", msg)
         print("ANA: pretrained weights successfully loaded\n")
