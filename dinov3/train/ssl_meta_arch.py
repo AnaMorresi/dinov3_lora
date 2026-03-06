@@ -304,6 +304,26 @@ class SSLMetaArch(nn.Module):
         self.student.ibot_head.init_weights()
         self.dino_loss.init_weights()
         self.ibot_patch_loss.init_weights()
+        # ANA: load pretrained backbone
+        if hasattr(self.cfg.student, "pretrained_weights") and self.cfg.student.pretrained_weights:
+            logger.info(f"Loading pretrained backbone from {self.cfg.student.pretrained_weights}")
+            print('Holi')
+            init_fsdp_model_from_checkpoint(
+                self.student.backbone,
+                self.cfg.student.pretrained_weights,
+                skip_load_keys=[
+                    "dino_head",
+                    "ibot_head",
+                    "dino_loss.center",
+                    "ibot_patch_loss.center",
+                ],
+                keys_not_sharded=[
+                    "backbone.rope_embed.periods",
+                    "qkv.bias_mask",
+                ],
+                process_group=distributed.get_process_subgroup(),
+            )
+        ###
         self.model_ema.load_state_dict(self.student.state_dict())
         if self.has_gram_teacher:
             if self.gram_ckpt is not None:
