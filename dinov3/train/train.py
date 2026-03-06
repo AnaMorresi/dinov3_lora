@@ -395,6 +395,30 @@ def do_train(cfg, model, resume=False):
     model.train()
 
     model.init_weights()
+    
+    # ANA: Load pretrained backbone if provided
+    if hasattr(cfg.student, "pretrained_weights") and cfg.student.pretrained_weights:
+
+        pretrained_path = cfg.student.pretrained_weights
+        print(f"\nANA: Loading pretrained backbone from {pretrained_path}")
+
+        state_dict = torch.load(pretrained_path, map_location="cpu")
+
+        # algunos checkpoints vienen con key "model" o "state_dict"
+        if "model" in state_dict:
+            state_dict = state_dict["model"]
+        elif "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+
+        # limpiar prefijos
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+
+        msg = model.student["backbone"].load_state_dict(state_dict, strict=False)
+
+        print("ANA: pretrained load msg:", msg)
+        print("ANA: pretrained weights successfully loaded\n")
+    ###
 
     student = model.student
 
